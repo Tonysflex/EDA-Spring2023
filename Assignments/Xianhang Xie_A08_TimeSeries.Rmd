@@ -2,7 +2,9 @@
 title: "Assignment 8: Time Series Analysis"
 author: "Xianhang Xie"
 date: "Spring 2023"
-output: pdf_document
+output: 
+  pdf_document: 
+    latex_engine: xelatex
 geometry: margin=2.54cm
 editor_options: 
   chunk_output_type: console
@@ -26,7 +28,7 @@ This exercise accompanies the lessons in Environmental Data Analytics on general
 * Load the tidyverse, lubridate, zoo, and trend packages
 * Set your ggplot theme
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 #1
 # Verify the home directory
 getwd()
@@ -158,7 +160,7 @@ GaringerOzone.daily.ts <-
   window(GaringerOzone.daily.ts, 
          start = as.Date("2010-01-01"), 
          end = as.Date("2019-12-31"))
-frequency(GaringerOzone.daily.ts) <- 1 # set the frequency to 1 (daily)
+GaringerOzone.daily.ts = ts(GaringerOzone.daily.ts, frequency = 365)
 
 # Create a time series object for monthly average ozone values
 GaringerOzone.monthly.ts <- ts(GaringerOzone.monthly$mean_ozone, start = c(2010, 1), end = c(2019, 12), frequency = 12)
@@ -170,19 +172,15 @@ GaringerOzone.monthly.ts <- ts(GaringerOzone.monthly$mean_ozone, start = c(2010,
 ```{r}
 #11
 # Decompose the daily time series object
-decomp_daily <- decompose(GaringerOzone.daily.ts, "multiplicative")
-
+decomp_daily <- stl(GaringerOzone.daily.ts, s.window = "periodic")
 # Plot the daily decomposition
-par(mfrow = c(4,1), mar = c(3, 3, 1, 1), oma = c(0, 0, 2, 0))
-plot(GaringerOzone.daily.ts, main = "Daily Ozone Concentration")
-plot(decomp_daily$trend, main = "Trend Component")
-plot(decomp_daily$seasonal, main = "Seasonal Component")
-plot(decomp_daily$random, main = "Residual Component")
+plot(decomp_daily)
 
 # Decompose the monthly time series object
-decomp_monthly <- decompose(GaringerOzone.monthly.ts, "multiplicative")
+decomp_monthly <- stl(GaringerOzone.monthly.ts, s.window = "periodic")
 
-
+# Plot the monthly decomposition
+plot(decomp_monthly)
 ```
 
 
@@ -190,26 +188,48 @@ decomp_monthly <- decompose(GaringerOzone.monthly.ts, "multiplicative")
 
 ```{r}
 #12
+# Run SMK test
+wind_data_trend1 <- Kendall::SeasonalMannKendall(GaringerOzone.monthly.ts)
 
-
+# Inspect results
+wind_data_trend1
+summary(wind_data_trend1)
 
 ```
 
-> Answer: 
+> Answer: The seasonal Mann-Kendall test goes beyond the Mann-Kendall test by taking into account how the data changes with the seasons. It looks at the seasonal parts of the time series instead of the whole series to see if there is a steady trend. By taking seasonal patterns into account, the test is more sensitive to changes in trend that happen at certain times of the year.
+
+> In the monthly ozone series, the data are likely to show seasonal patterns because of things like changes in weather and atmospheric conditions. So, the seasonal Mann-Kendall test is a good way to look for trends in these numbers.
 
 13. Create a plot depicting mean monthly ozone concentrations over time, with both a geom_point and a geom_line layer. Edit your axis labels accordingly.
 
 ```{r}
 #13
+# Create a new data frame with mean monthly ozone concentrations
+GaringerOzone.monthly.mean <- aggregate(GaringerOzone$Daily.Max.8.hour.Ozone.Concentration, 
+              by = list(year = format(GaringerOzone$Date, "%Y"), 
+              month = format(GaringerOzone$Date, "%m")), FUN = mean)
+GaringerOzone.monthly.mean$Date <- as.Date(paste(GaringerOzone.monthly.mean$year, 
+        GaringerOzone.monthly.mean$month,"01", sep = "-"))
 
-
-
+# Create a plot with both a point and line layer
+ggplot(GaringerOzone.monthly.mean, aes(x = Date, y = x)) +
+  geom_point() +
+  geom_line() +
+  labs(x = "Date", y = "Mean Monthly Ozone Concentration (ppm)", 
+       title = "Mean Monthly Ozone Concentrations at Garinger High School") +
+  scale_x_date(date_labels = "%Y-%m", date_breaks = "1 year")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 ```
 
 14. To accompany your graph, summarize your results in context of the research question. Include output from the statistical test in parentheses at the end of your sentence. Feel free to use multiple sentences in your interpretation.
 
-> Answer: 
+> Answer: From 2010 to 2019, the average amount of ozone at Garinger High School in North Carolina was looked at. The time series plot shows that the amount of ozone changes with the seasons, with peaks in the summer and lower levels in the winter. In 2010, the average monthly ozone levels were around 0.044 ppm. In 2019, they are around 0.038 ppm.
+
+> We did a seasonal Mann-Kendall test to see if the amount of ozone in the air changed in the same way each month. The test showed that the monthly ozone concentrations at the Garinger High School station are getting higher (tau = - 0.143, p-value = 0.046724<0.05), which means that the ozone concentrations have gone down at this station in the 2010s.
+
+
 
 15. Subtract the seasonal component from the `GaringerOzone.monthly.ts`. Hint: Look at how we extracted the series components for the EnoDischarge on the lesson Rmd file.
 
@@ -217,14 +237,12 @@ decomp_monthly <- decompose(GaringerOzone.monthly.ts, "multiplicative")
 
 ```{r}
 #15
-
-
-
+# Subtract the seasonal component from the monthly time series
+non_seasonal <- GaringerOzone.monthly.ts - as.data.frame(decomp_monthly$time.series)$seasonal
 #16
-
-
-
+mk_test_non_seasonal <- Kendall::MannKendall(non_seasonal)
+summary(mk_test_non_seasonal)
 
 ```
 
-> Answer: 
+> Answer: Comparing the results of the two tests, after removing the seasonal effect, the p value of the Mann Kendall decreased from 0.048 to 0.0075. So when we remove the seasonal effect, the result trend becomes quite clear.
